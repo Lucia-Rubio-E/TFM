@@ -13,11 +13,8 @@
 #include "mqtt_client.h"
 #include "esp_sntp.h"
 
-
-
-#define N_MAX_ANCHORS 8           // nº máximo de anclas por tag
-#define SESIONES_POR_RONDA 8    // nº de sesiones FTM por ronda
-
+#define N_MAX_ANCHORS 8
+#define SESIONES_POR_RONDA 8
 
 #define WIFI_SSID "Lucía"
 #define WIFI_PASS "passwordlucia"
@@ -343,5 +340,5 @@ void app_main(void) {
     }
 
     xTaskCreate(ftm_session_task, "FTM Session Task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
-
 }
+

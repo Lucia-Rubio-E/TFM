@@ -13,7 +13,6 @@
 #include "esp_mac.h"
 #include "esp_sntp.h"
 #include "mqtt_client.h"
-
 #include "esp_wifi_types.h"
 
 #define TAG "gtec-ftm-anchor2"
@@ -22,39 +21,34 @@
 #define WIFI_PASS "passwordlucia"
 #define MQTT_URI         "mqtt://172.20.10.13:1884"
 #define MQTT_TOPIC       "data"
-#define MQTT_INTERVAL_MS 60000  // intervalo de envío (60 segundos)
+#define MQTT_INTERVAL_MS 60000
 
-// configuración FTM
-#define CURRENT_BW       WIFI_BW_HT20  // ancho de banda (20MHz)
-#define CURRENT_CHANNEL  3             // canal wifi
-#define WIFI_RETRY_MAX   -1            // nº max de intentos de reconexión wifi ( -1 => infinitos)
+#define CURRENT_BW       WIFI_BW_HT20
+#define CURRENT_CHANNEL  3
+#define WIFI_RETRY_MAX   -1
 
-// configuración nodo ancla 2
 #define ANCHOR_ID        "2"
 #define POSITION_X       10.0f
 #define POSITION_Y       0.0f
 #define POSITION_Z       0.0f
 
-// bits para los eventos WiFi y FTM
 typedef enum {
     WIFI_AP_START_BIT = BIT0,
     WIFI_STA_CONNECTED_BIT = BIT1,
     FTM_RESPONDER_ENABLED_BIT = BIT2
 } wifi_event_bits_t;
 
-// estructura global anchor_context_t
 typedef struct {
-    EventGroupHandle_t event_group;       // eventos WiFI y FTM
-    esp_mqtt_client_handle_t mqtt_client; // conexión MQTT
-    char mac_str[18];                     // dirección MAC de este nodo
+    EventGroupHandle_t event_group;
+    esp_mqtt_client_handle_t mqtt_client;
+    char mac_str[18];
     TaskHandle_t mqtt_task_handle;
     time_t last_mqtt_time;
     uint8_t wifi_retry_count;
 } anchor_context_t;
 
-static anchor_context_t g_ctx = {0}; // contexto del nodo ancla
+static anchor_context_t g_ctx = {0};
 
-// funciones
 static void mqtt_task(void *pvParameters);
 static void send_position_update(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
@@ -62,87 +56,83 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 static void initialise_wifi(void);
 static void initialise_mqtt(void);
 
-// tarea MQTT
 static void mqtt_task(void *pvParameters) {
-    TickType_t last_wake_time = xTaskGetTickCount(); // tiempo inicio tarea MQTT
+    TickType_t last_wake_time = xTaskGetTickCount();
 
     while (1) {
-        EventBits_t bits = xEventGroupGetBits(g_ctx.event_group);  // lee los bits de los eventos actuales
-        if (bits & WIFI_STA_CONNECTED_BIT) {                        // si está conectado al AP
-            send_position_update();                                 // envía la posición
-            g_ctx.last_mqtt_time = time(NULL);                      // tiempo publicación MQTT
+        EventBits_t bits = xEventGroupGetBits(g_ctx.event_group);
+        if (bits & WIFI_STA_CONNECTED_BIT) {
+            send_position_update();
+            g_ctx.last_mqtt_time = time(NULL);
         }
 
-        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(MQTT_INTERVAL_MS));  // espera al prox envío de MQTT
+        vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(MQTT_INTERVAL_MS));
     }
 }
 
-// envía la posición por MQTT
 static void send_position_update(void) {
     if (!g_ctx.mqtt_client) {
-        ESP_LOGW(TAG, "MQTT client not initialized"); // si el cliente MQTT no está iniciado
+        ESP_LOGW(TAG, "MQTT client not initialized");
         return;
     }
 
-    char json_buffer[256]; // buffer para el mensaje JSON
+    char json_buffer[256];
     int written = snprintf(json_buffer, sizeof(json_buffer),
                  "["
                  "{"
                  "\"mac_anchor\":\"%s\","
                  "\"positionx\":%.1f,"
                  "\"positiony\":%.1f"
-                 //"\"timestamp\":\"%s\""
                  "}"
                  "]",
                  g_ctx.mac_str, POSITION_X, POSITION_Y);
 
     if (written >= sizeof(json_buffer)) {
-        ESP_LOGE(TAG, "JSON buffer overflow");  // si se sobrepasa el buffer del JSON
+        ESP_LOGE(TAG, "JSON buffer overflow");
         return;
     }
 
-    int msg_id = esp_mqtt_client_publish(g_ctx.mqtt_client, MQTT_TOPIC, json_buffer, 0, 1, 0); // este cliente publica el JSON por MQTT
+    int msg_id = esp_mqtt_client_publish(g_ctx.mqtt_client, MQTT_TOPIC, json_buffer, 0, 1, 0);
     if (msg_id < 0) {
-        ESP_LOGE(TAG, "Failed to publish MQTT message"); // fallo al publicar MQTT
+        ESP_LOGE(TAG, "Failed to publish MQTT message");
     } else {
-        ESP_LOGI(TAG, "Published MQTT message, msg_id=%d", msg_id); // se ha publicado el mensaje MQTT
+        ESP_LOGI(TAG, "Published MQTT message, msg_id=%d", msg_id);
     }
 }
 
-
-static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) { // handler wifi
+static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT) {
         switch (event_id) {
-            case WIFI_EVENT_AP_START: // AP ha iniciado
+            case WIFI_EVENT_AP_START:
                 ESP_LOGI(TAG, "SoftAP started");
                 xEventGroupSetBits(g_ctx.event_group, WIFI_AP_START_BIT);
                 break;
 
-            case WIFI_EVENT_AP_STACONNECTED: { // STA se conecta al AP
+            case WIFI_EVENT_AP_STACONNECTED: {
                 wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
                 ESP_LOGI(TAG, "Station connected to AP: " MACSTR ", AID=%d",
                          MAC2STR(event->mac), event->aid);
                 break;
             }
 
-            case WIFI_EVENT_AP_STADISCONNECTED: { // STA se desconecta del AP
+            case WIFI_EVENT_AP_STADISCONNECTED: {
                 wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
                 ESP_LOGI(TAG, "Station disconnected from AP: " MACSTR ", AID=%d",
                          MAC2STR(event->mac), event->aid);
                 break;
             }
 
-            case WIFI_EVENT_STA_START: // STA ha iniciado
+            case WIFI_EVENT_STA_START:
                 esp_wifi_connect();
                 break;
 
-            case WIFI_EVENT_STA_CONNECTED: // se ha conectado al AP por MQTT
+            case WIFI_EVENT_STA_CONNECTED:
                 ESP_LOGI(TAG, "Connected to AP for MQTT");
                 g_ctx.wifi_retry_count = 0;
                 xEventGroupSetBits(g_ctx.event_group, WIFI_STA_CONNECTED_BIT);
                 break;
 
-            case WIFI_EVENT_STA_DISCONNECTED: // se ha desconectado del AP
+            case WIFI_EVENT_STA_DISCONNECTED:
                 ESP_LOGI(TAG, "Disconnected from AP, attempting reconnection...");
                 esp_wifi_connect();
                 xEventGroupClearBits(g_ctx.event_group, WIFI_STA_CONNECTED_BIT);
@@ -153,19 +143,19 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip)); // log de la IP
+        ESP_LOGI(TAG, "Got IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         xEventGroupSetBits(g_ctx.event_group, WIFI_STA_CONNECTED_BIT);
     }
 }
 
-static void initialise_mqtt(void) { // inicio MQTT
+static void initialise_mqtt(void) {
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = MQTT_URI,
         .credentials.client_id = "esp32_anchor_1",
         .session.keepalive = 60,
     };
 
-    g_ctx.mqtt_client = esp_mqtt_client_init(&mqtt_cfg); // configuración del cliente MQTT
+    g_ctx.mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
     if (g_ctx.mqtt_client == NULL) {
         ESP_LOGE(TAG, "Failed to initialize MQTT client");
         return;
@@ -176,34 +166,34 @@ static void initialise_mqtt(void) { // inicio MQTT
     ESP_LOGI(TAG, "MQTT client started");
 }
 
-static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) { // handler MQTT
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     switch (event_id) {
         case MQTT_EVENT_CONNECTED:
-            ESP_LOGI(TAG, "MQTT connected"); // conexión MQTT establecida
+            ESP_LOGI(TAG, "MQTT connected");
             break;
 
         case MQTT_EVENT_DISCONNECTED:
-            ESP_LOGI(TAG, "MQTT disconnected");  // desconexión MQTT
+            ESP_LOGI(TAG, "MQTT disconnected");
             break;
 
         case MQTT_EVENT_DATA:
-            ESP_LOGI(TAG, "MQTT message received: %.*s", event->data_len, event->data); // mensaje MQTT recibido
+            ESP_LOGI(TAG, "MQTT message received: %.*s", event->data_len, event->data);
             break;
 
         case MQTT_EVENT_ERROR:
-            ESP_LOGE(TAG, "MQTT error occurred"); // error en la conexión MQTT
+            ESP_LOGE(TAG, "MQTT error occurred");
             esp_mqtt_client_stop(g_ctx.mqtt_client);
             esp_mqtt_client_start(g_ctx.mqtt_client);
             break;
 
         default:
-            ESP_LOGD(TAG, "Unhandled MQTT event: %ld", event_id); // evento MQTT no manejado
+            ESP_LOGD(TAG, "Unhandled MQTT event: %ld", event_id);
             break;
     }
 }
 
-static void initialise_wifi(void) {  // inicio del WiFi en modo AP y STA
+static void initialise_wifi(void) {
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
@@ -224,7 +214,6 @@ static void initialise_wifi(void) {  // inicio del WiFi en modo AP y STA
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
-    // MAC y SSID
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
     snprintf(g_ctx.mac_str, sizeof(g_ctx.mac_str), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -232,20 +221,18 @@ static void initialise_wifi(void) {  // inicio del WiFi en modo AP y STA
     char ssid[32];
     snprintf(ssid, sizeof(ssid), "ftm_%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    // configuración del AP con FTM Responder habilitado
     wifi_config_t ap_config = {
         .ap = {
             .ssid_len = strlen(ssid),
             .channel = CURRENT_CHANNEL,
             .max_connection = 4,
             .authmode = WIFI_AUTH_OPEN,
-            .ftm_responder = true,  // Habilitar FTM Responder
+            .ftm_responder = true,
             .pairwise_cipher = WIFI_CIPHER_TYPE_CCMP,
         },
     };
     strlcpy((char *)ap_config.ap.ssid, ssid, sizeof(ap_config.ap.ssid));
 
-    // configuración del STA para MQTT
     wifi_config_t sta_config = {
         .sta = {
             .threshold.authmode = WIFI_AUTH_WPA2_PSK,
@@ -265,25 +252,24 @@ static void initialise_wifi(void) {  // inicio del WiFi en modo AP y STA
 }
 
 void app_main(void) {
-    esp_err_t ret = nvs_flash_init();  // se inicia la non-volatile storage
+    esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
 
-    initialise_wifi(); // inicio WiFi
+    initialise_wifi();
 
     ESP_LOGI(TAG, "Waiting for WiFi connections...");
-    EventBits_t bits = xEventGroupWaitBits(g_ctx.event_group, WIFI_AP_START_BIT | WIFI_STA_CONNECTED_BIT, pdFALSE, pdTRUE, pdMS_TO_TICKS(30000)); // timeout de 30 seg
+    EventBits_t bits = xEventGroupWaitBits(g_ctx.event_group, WIFI_AP_START_BIT | WIFI_STA_CONNECTED_BIT, pdFALSE, pdTRUE, pdMS_TO_TICKS(30000));
 
     if ((bits & (WIFI_AP_START_BIT | WIFI_STA_CONNECTED_BIT)) != (WIFI_AP_START_BIT | WIFI_STA_CONNECTED_BIT)) {
         ESP_LOGW(TAG, "WiFi initialization timeout, continuing anyway...");
     }
 
-    initialise_mqtt();  // inicio de MQTT
+    initialise_mqtt();
 
-    // tarea MQTT
     BaseType_t task_created;
     task_created = xTaskCreate(mqtt_task, "mqtt_task", 4096, NULL, 5, &g_ctx.mqtt_task_handle);
     if (task_created != pdPASS) {
@@ -292,8 +278,6 @@ void app_main(void) {
     }
 
     ESP_LOGI(TAG, "All tasks created successfully");
-
-    // dispositivo listo para responder a solicitudes FTM
     ESP_LOGI(TAG, "FTM Responder is up and running");
 }
 
