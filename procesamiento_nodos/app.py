@@ -3,7 +3,6 @@ import psycopg2
 
 app = Flask(__name__)
 
-# conexión a la base de datos
 db_params = {  
     'dbname': 'postgres2',
     'user': 'postgres',
