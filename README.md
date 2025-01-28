@@ -6,30 +6,30 @@ This repository contains the implementation of a static sensor localization syst
 ## Repository Structure
 
 ```
-├── App_Unity/                  # Unity AR guidance application
-│   ├── UIController.cs         # User interface management
-│   ├── main.cs   		# System calibration logic
-│   ├── sensorHandler.cs	# Device sensor handling
-│   ├── QRCodeScanner.cs	# QR code detection
-│   └── ServerClient.cs		# Server communication
+├── App_Unity/Assets		# Unity AR guidance application
+│   ├── UIController.cs         	# User interface management
+│   ├── main.cs   			# System calibration logic
+│   ├── sensorHandler.cs		# Device sensor handling
+│   ├── QRCodeScanner.cs		# QR code detection
+│   └── ServerClient.cs			# Server communication
 │
-├── ESP32/                     # ESP32-S3 node firmware
-│   ├── anchor1/              # First anchor node
-│   ├── anchor2/              # Second anchor node
-│   ├── anchor3/              # Third anchor node
-│   └── tag1/                 # Tag node
+├── ESP32/			# ESP32-S3 node firmware
+│   ├── anchor1/			# First anchor node
+│   ├── anchor2/			# Second anchor node
+│   ├── anchor3/			# Third anchor node
+│   └── tag1/				# Tag node
 │
-├── Node-RED/                  # Data flow processing
-│   └── flows_node_RED.json   # Node-RED flow configuration
+├── Node-RED/			# Data flow processing
+│   └── flows_node_RED.json		# Node-RED flow configuration
 │
-├── PostgreSQL/               # Database scripts
-│   └── database_backup      # Database structure and initial data
+├── PostgreSQL/			# Database scripts
+│   └── database_backup			# Database structure and initial data
 │
-└── procesamiento_nodos/     # Node processing scripts
-    ├── app.py              # Flask server implementation
-    ├── calcular_localizacion.py    # Location calculation
-    ├── reset_tables.sql    # Database reset script
-    └── resolver_trilateracion.py   # Trilateration algorithm
+└── procesamiento_nodos/	# Node processing scripts
+    ├── app.py				# Flask server implementation
+    ├── calcular_localizacion.py	# Location calculation
+    ├── reset_tables.sql		# Database reset script
+    └── resolver_trilateracion.py	# Trilateration algorithm
 ```
 
 ## Installation Instructions
@@ -184,4 +184,3 @@ Note: Both scripts need to be running simultaneously. The location calculation s
 ## Demo Video
 
 A complete demonstration of the system can be found [here](https://youtu.be/Hp4ShoctpZ8).
-
