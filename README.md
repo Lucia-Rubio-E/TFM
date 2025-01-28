@@ -171,10 +171,10 @@ Note: Both scripts need to be running simultaneously. The location calculation s
 ## Configuration
 
 1. ESP32 Nodes
-    - Configure WiFi credentials in sdkconfig
-    - Configure FTM parameters in main.c
+    - Configure WiFi settings: SSID and password.
+    - Configure FTM parameters if necessary (adjust based on the environment).
 2. Unity Application
-    - Update server URL in ServerClient.cs
+    - Update the server IP (the REST API URL) in ServerClient.cs.
 
 ## Usage
 
