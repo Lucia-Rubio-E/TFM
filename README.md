@@ -170,6 +170,12 @@ Note: Both scripts need to be running simultaneously. The location calculation s
 
 ## Configuration
 
+1. ESP32 Nodes
+    - Configure WiFi credentials in sdkconfig
+    - Configure FTM parameters in main.c
+2. Unity Application
+    - Update server URL in ServerClient.cs
+
 ## Usage
 
 1. Position and power up the nodes
